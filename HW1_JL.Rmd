@@ -1,0 +1,377 @@
+---
+title: "PSTAT131_HW1"
+author: "Justin Lee"
+date: "10/14/2020"
+output: pdf_document
+---
+
+
+
+# (1)
+
+
+## Reading the data and attaching packages 
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(resample)
+library(miscTools)
+library(FIACH)
+
+algae <- read_table2("algaeBloom.txt",col_names=c('season','size','speed','mxPH','mnO2','Cl','NO3','NH4',
+'oPO4','PO4','Chla','a1','a2','a3','a4','a5','a6','a7'),
+na="XXXXXXX")
+
+glimpse(algae)
+```
+
+## (a)
+
+```{r}
+algae %>% group_by(season) %>% summarise(n = n())
+```
+
+From the data we see above, we can see the total count of the observations are:\
+$\bullet$ Autumn = 40\
+$\bullet$ Spring = 53\
+$\bullet$ Summer = 45\
+$\bullet$ Winter = 62\
+
+## (b)
+```{r}
+missing = is.na(algae)
+length(missing[missing == TRUE])
+
+chemicals = algae[, 4:11]
+colMeans(chemicals,na.rm = TRUE)
+#Using package 'Resample'
+colVars(chemicals,na.rm= TRUE)
+```
+
+
+We can confirm that there are missing values within the dataset using the function "is.na()". The total count of the missing values were 33. I used the length function to see how many counts of "TRUE" there were in the "missing" subset. The mean and variance is shown above as well using the *colMeans* function as well as *colvars* from a pacakge 'Resample' that I have learned from another class. For both the cases of mean and variance, the missing values were ignored. The magnitude is greater than the mean for most of the chemicals which can indicate that the data points are very spread out from the average. 
+
+## (c)
+
+```{r}
+colMedians(chemicals, na.rm = TRUE)
+
+
+
+#chemicals subset with the missing values replaced with mean for each chemical
+chemicals_2 = chemicals
+chemicals_2$mnO2[is.na(chemicals_2$mnO2)] = mean(chemicals$mnO2,na.rm = TRUE)
+chemicals_2$Cl[is.na(chemicals_2$Cl)] = mean(chemicals$Cl,na.rm = TRUE)
+chemicals_2$NO3[is.na(chemicals_2$NO3)] = mean(chemicals$NO3,na.rm = TRUE)
+chemicals_2$NH4[is.na(chemicals_2$NH4)] = mean(chemicals$NH4,na.rm = TRUE)
+chemicals_2$oPO4[is.na(chemicals_2$oPO4)] = mean(chemicals$oPO4,na.rm = TRUE)
+chemicals_2$PO4[is.na(chemicals_2$PO4)] = mean(chemicals$PO4,na.rm = TRUE)
+chemicals_2$Chla[is.na(chemicals_2$Chla)] = mean(chemicals$Chla,na.rm = TRUE)
+
+missing2 = is.na(chemicals_2)
+#Confirming there are no missing values, this should output zero if I did everythin correctly
+length(missing2[missing2 == TRUE])
+
+
+#Computing M.A.D. for each chemical using package 'FIACH'
+colMad(chemicals_2)
+
+```
+Since the output for the Median Absolute Deviation is does not show which output for each chemical, I will state them neatly here:\
+$\bullet$ mxPH = 0.504084\
+$\bullet$ mnO2 = 1.979271\
+$\bullet$ Cl = 35.337771\
+$\bullet$ NO3 = 2.153477\
+$\bullet$ NH4 = 112.059356\
+$\bullet$ OPO4 = 45.466153\
+$\bullet$ PO4 = 121.444955\
+$\bullet$ Chla = 7.685057\
+
+The median for each chemicals were found using the *colMedians* function from the package "miscTools". This provided a lot more of a simple way for me to output the name of the chemical and the median. Finding the median absolute deviation has many ways including using the mad() function but for simplicity I used *colMad* from the package "FIACH" that I learned in the past. Since missing values present needs to be replaced to find M.A.D., I used *is.na()* function to find the missing values and replaced them with the mean value for that chemical. This adjusted value should remain closer to the original, but just more accurate. We can see that the mean and variances have magnitudes with larger differences. We can see that the variance for $mnO_2$ is 5.718089 and the mean is 9.117778. This is almost two times from the variance and there are significant differences between chemicals in variance and mean. However, the medians and the median absolute deviations of the chemicals are very close to each other compared to the other. This pattern is true for all of the chemicals beside $mnO_2$.\
+
+\newpage
+# (2)
+
+## (a)
+```{r}
+algae %>% ggplot(aes(x=mxPH, stat = "density")) + 
+  geom_histogram(breaks = seq(5, 10, by = 1),col = "black", fill = "steelblue") +
+  labs(title = "Histogram of Maximum pH", x = "Maximum pH Value", y = "Probability of pH Value")
+```
+I used the ggplot() function to produce a histogram with probability on the vertical axis and the maximum pH on the horizontal axis. Using the statement *stat = "density"* gives us a histogram that contains a measure of density instead of frequency. The distribution seems to be skewed slightly to the left from the plot and the computed median of mxPH is larger than it's mean.   
+
+
+## (b) 
+```{r}
+algae %>% ggplot(aes(x=mxPH, stat = "density")) + 
+  geom_histogram(breaks = seq(5, 10, by = 1),col = "black", fill = "steelblue") +
+  geom_density(aes(y = ..density..*(100))) +
+  geom_rug(col = "red") +
+  labs(title = "Histogram of Maximum pH", x = "Maximum pH Value", y = "Probability of pH Value") + 
+  ylim(c(0,100))
+
+
+```
+Using geom_density() and geom_rug, we can add the density curve along with the rug plot. The geom_density() did give me an error in the beginning due to the fact that the probability was out of a hundred, but the density curve was out of one. However, I multipled the y-values of the density curve by a hundred to fix the problem. 
+
+## (c) 
+```{r}
+algae %>% ggplot(aes(x = size, y = a1)) +
+  geom_boxplot(col = "steelblue") + 
+  labs(title = expression(paste("A conditioned Boxplot of Algal ", "a"[1])), x = "Size of River", y = expression(paste("Amount of Algal  ", "a"[1])))
+
+```
+We use ggplot() along with geom_boxplot to creat a boxplot for $a_1$. We use the aes() statement to group them by size which are: small,medium,large. We also specify in the aes() statement to indicate that the y-axis will be the data from $a_1$ and the x-axis will the size.
+
+## (d)
+
+```{r}
+x <- algae$NO3
+y <- algae$NH4
+x[which(x %in% boxplot.stats(x)$out)]
+y[which(y %in% boxplot.stats(y)$out)]
+```
+
+To find the outliers we can use the range given by this formula: $[(Q1 - 1.5IQR),(Q3 + 1.5IQR)]$. IQR is the interquartile range and Q1 and Q3 are the quartiles. I assigned the variable $NO_3$ to to x and $NH_4$ to y. Using the operator, which(), and the function, boxplot.stats(). Through the function I wrote, we are able to find which data points are outliers. From the results we can see that there are 5 outliers for $NO_3$ and 27 outliers for $NH_4$.   
+
+## (e)
+
+From question 1 we know:\
+$NO_3$:\
+mean = 3.282389, variance = 14.26176, median = 2.6750, MAD = 22.153477\
+$NH_4$:\
+mean = 501.295828, variance = 3851585, median = 103.1665, MAD = 112.059356\
+
+
+We can see that both the variance of NO3 and NH4 is significantly larger than the mean. When we look at the values for the median and MAD we can see that they are very similar. In conclusion, the median and MAD values that are not influenced much form the outlier which means that they are more robust measurements than the mean and variance.  
+
+\newpage
+
+# (3)
+
+## (a) 
+```{r}
+summary(algae)
+sum(is.na(algae))
+
+```
+Using the *summary()* function, we can see which variables have missing values and how many there are. We can see that every predictors have missing values starting from mxPH to Chla. From this we can see that *mxPH* has 1 missing value, *mnO2* has 2 missing values, *Cl* has 10 missing values, *NO3* has 2 missing values, *NH4* has 2 missing values, *OPO4* has 2 missing values, *PO4* has 2 missing values, and *Chla* has 12 missing values. This brings us to a total of 33 missing values. 
+
+## (b)
+
+```{r}
+algae.del = filter(algae,  !is.na(mxPH), !is.na(mnO2), !is.na(Cl), !is.na(NO3), !is.na(NH4), !is.na(oPO4), !is.na(PO4), !is.na(Chla))
+summary(algae.del)
+str(algae.del)
+```
+There are a total of *184 observations* in algae.del. 
+
+## (c)
+
+```{r}
+algae.med = algae %>%
+mutate_at(vars(mxPH,mnO2,Cl,NO3,NH4,oPO4,PO4,Chla),
+          funs(ifelse(is.na(.)==TRUE,median(algae$.,na.rm = TRUE),.)))
+str(algae.med)
+
+algae.med[48,]
+algae.med[62,]
+algae.med[199,]
+```
+There are a total or *200 observations* in algae.med
+
+## (d)
+```{r}
+df = data.frame(algae.del[, 4:11])
+
+cor(df, use = "pairwise.complete.obs" )
+
+model = lm(PO4~oPO4, data = algae)
+summary(model)
+
+predict(model,algae[28,"oPO4"])
+#filling in the missing value in 'algae'
+algae[28,"PO4"] = predict(model,algae[28,"oPO4"])
+```
+The value that we obtain for the missing value for PO4 based on oPO4 in the 28th observation is 48.06929.
+
+## (e)
+We know from lecture that survivorship bias favors the values that appear but it ignores the values that did not appear. The bullet holes on planes example studies the concentration of the holes and the lack of bullet holes on the planes that did survive. We are not considerting the fact that missing values may be indicative of an outlying phenomenon by using imputed values. 
+
+\newpage
+
+# (4)
+
+## (a)
+```{r}
+set.seed(123)
+cv = sample(cut(1:200,breaks = 5, label = FALSE))
+cv
+```
+
+## (b) 
+```{r}
+do.chunk <- function(chunkid, chunkdef, dat){ # function argument
+  
+  train = (chunkdef != chunkid)
+  
+  Xtr = dat[train,1:11] # get training set
+  Ytr = dat[train,12] # get true response values in trainig set
+
+  Xvl = dat[!train,1:11] # get validation set
+  Yvl = dat[!train,12] # get true response values in validation set
+
+  lm.a1 <- lm(a1~., data = dat[train,1:12])
+  predYtr = predict(lm.a1) # predict training values
+  predYvl = predict(lm.a1,Xvl) # predict validation values
+  data.frame(fold = chunkid,
+             train.error = mean((predYtr - Ytr$a1)^2), # compute and store training error
+             val.error = mean((predYvl - Yvl$a1)^2)) # compute and store test error
+}
+
+#My code
+lapply(1:5, FUN = do.chunk, chunkdef = cv, dat = algae.med)
+
+```
+
+# (5)
+
+```{r}
+algae.Test <- read_table2('algaeTest.txt',
+                          col_names=c('season','size','speed','mxPH','mnO2','Cl','NO3',
+                                      'NH4','oPO4','PO4','Chla','a1'),
+                          na=c('XXXXXXX'))
+
+firstdata = algae.med[12]
+newdata = algae.Test[12]
+
+fit = lm(a1 ~ ., data = algae.med[1:12])
+
+firstpredict = predict(fit, algae.med[1:11])
+newpredict = predict(fit, algae.Test[1:11])
+
+data.frame(train.error = mean((firstpredict - firstdata$a1)^2), val.error = mean((newpredict - newdata$a1)^2))
+
+
+
+
+
+```
+Yes, this is what is roughly expected based of the CV estimated test error from number 4. The *train.error is 286.2661* which is very close to train.error predicted in number 4. The *val.error is 250.1794* which is not close to the predicted val.error besides the 2nd fold.
+
+\newpage
+
+# (6)
+
+```{r}
+library(ISLR)
+head(Wage)
+```
+
+## (a)
+```{r}
+Wage %>% ggplot(aes(x = age, y = wage)) +
+  geom_point() +
+  geom_smooth(color = "red") +
+  labs(title = "Wages And Age", x = "Age", y = "Wage")
+```
+
+To plot this graph I used ggplot() along with geom_point() and geom_smooth(). I used the red color for the fit so that it'll stick out more. There is a pattern that we can observe and we see that the wages steadily increases until the age hits around 40 then remains constant until about age 60. Then we can see that the wage goes down slowly until the end. This matches exactly what I expected because as time goes on from you twenties, we tend to work on our skills which will give us promotions or better jobs. Then as our age passes 60, we have to start thinking about retirement or even retire. 
+
+## (b)
+
+(i):\
+```{r}
+attach(Wage)
+x = lm(wage ~ 1 + age + I(age^2) + I(age^3) + I(age^4) + I(age^5) + I(age^6) + I(age^7)+ I(age^8)+ I(age^9)+ I(age^10))
+summary(x)
+```
+
+(ii):\
+```{r}
+set.seed(123)
+library(plyr)
+do.chunk_2 <- function(chunkid, chunkdef, dat, a){ # function argument
+  
+  train = (chunkdef != chunkid)
+  
+  Xtr = dat[train,1:10] # get training set
+  Ytr = dat[train,11] # get true response values in trainig set
+
+  Xvl = dat[!train,1:10] # get validation set
+  Yvl = dat[!train,11] # get true response values in validation set
+
+  if (a == 0){
+    lm.x = lm(wage~1, data = dat[train, 1:11])
+  }
+  else {
+    lm.x = lm(wage~poly(x = age, degree = a, raw = FALSE),        data = dat[train, 1:11])
+  }
+  
+  predYtr = predict(lm.x) # predict training values
+  predYvl = predict(lm.x,Xvl) # predict validation values
+  data.frame(fold = chunkid,
+             train.error = mean((predYtr - Ytr)^2), # compute and store training error
+             val.error = mean((predYvl - Yvl)^2)) # compute and store test error
+}
+
+
+
+
+cv = sample(cut(1:nrow(Wage),breaks = 5, label = FALSE))
+
+
+
+
+
+df <- data.frame()
+for (i in 0:10){
+  ldply_out <- ldply(1:5, .fun = do.chunk_2,chunkdef = cv, dat = Wage, a = i)
+  df <- rbind(df, ldply_out)
+}
+
+df
+
+
+degree_0 <- colMeans(ldply(1:5, .fun = do.chunk_2, chunkdef = cv, dat = Wage, a= 0))
+
+degree_1 <- colMeans(ldply(1:5, .fun = do.chunk_2, chunkdef = cv, dat = Wage, a= 1))
+
+degree_2 <- colMeans(ldply(1:5, .fun = do.chunk_2, chunkdef = cv, dat = Wage, a= 2))
+
+degree_3 <- colMeans(ldply(1:5, .fun = do.chunk_2, chunkdef = cv, dat = Wage, a= 3))
+
+degree_4 <- colMeans(ldply(1:5, .fun = do.chunk_2, chunkdef = cv, dat = Wage, a= 4))
+
+degree_5 <- colMeans(ldply(1:5, .fun = do.chunk_2, chunkdef = cv, dat = Wage, a= 5))
+
+degree_6 <- colMeans(ldply(1:5, .fun = do.chunk_2, chunkdef = cv, dat = Wage, a= 6))
+
+degree_7 <- colMeans(ldply(1:5, .fun = do.chunk_2, chunkdef = cv, dat = Wage, a= 7))
+
+degree_8 <- colMeans(ldply(1:5, .fun = do.chunk_2, chunkdef = cv, dat = Wage, a= 8))
+
+degree_9 <- colMeans(ldply(1:5, .fun = do.chunk_2, chunkdef = cv, dat = Wage, a= 9))
+
+degree_10 <- colMeans(ldply(1:5, .fun = do.chunk_2, chunkdef = cv, dat = Wage, a= 10))
+
+
+
+
+df2 = as.data.frame(rbind(degree_0, degree_1, degree_2, degree_3, degree_4, degree_5, degree_6, degree_7, degree_8, degree_9, degree_10))
+df2$degree = 0:10
+df2[-1]
+```
+
+(c):
+```{r}
+df2 %>% ggplot() +
+  geom_line(aes(x = degree, y = train.error,color = "red"), na.rm   = TRUE) +
+  geom_line(aes(x = degree, y = val.error, color = "blue"))+
+  scale_color_discrete("legend",labels = c("train.error", "test.error")) +
+  labs(title = "Training and Testing Error of wages as a polynomial function of of age", x = "Degree of Polynomial", y = "MSE")
+
+```
+
+As p increases the training error and the testing error both goes significantly down after 1. However we can see that the training error has a higher error than the test error. At around Degree 10 we can see that it has the minimum test error. So we choose the model at degree *10* because we want to minimize the test errors.
