@@ -1,0 +1,232 @@
+---
+title: "HW3"
+author: "Justin Lee"
+date: "11/16/2020"
+output: pdf_document
+---
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(ROCR)
+library(tree)
+library(maptree)
+library(class)
+library(lattice)
+library(ggridges)
+library(superheat)
+
+drug_use <- read_csv('drug.csv',
+                     col_names = c('ID','Age','Gender','Education','Country','Ethnicity',
+'Nscore','Escore','Oscore','Ascore','Cscore','Impulsive',
+'SS','Alcohol','Amphet','Amyl','Benzos','Caff','Cannabis',
+'Choc','Coke','Crack','Ecstasy','Heroin','Ketamine',
+'Legalh','LSD','Meth','Mushrooms','Nicotine','Semer','VSA'))
+
+```
+
+# (1) 
+
+```{r}
+drug_use <- drug_use %>% mutate_at(as.ordered,
+                                   .vars=vars(Alcohol:VSA))
+drug_use <- drug_use %>%
+  mutate(Gender = factor(Gender, labels=c("Male", "Female")))%>%
+  mutate(Ethnicity = factor(Ethnicity, labels=c("Black","Asian", "White",
+"Mixed:White/Black", "Other",
+"Mixed:White/Asian",
+"Mixed:Black/Asian"))) %>%
+mutate(Country = factor(Country, labels=c("Australia", "Canada", "New Zealand",
+"Other", "Ireland", "UK", "USA")))
+
+```
+
+## (a)
+
+```{r}
+drug_use <- drug_use %>% 
+  mutate(recent_cannabis_use = factor(ifelse(Cannabis >= "CL3", "Yes", "No"),
+                                      levels = c("No","Yes")))
+#Check to see if the new column exists
+names(drug_use)
+```
+
+## (b)
+
+```{r}
+set.seed(123)
+drug_use_subset <- drug_use %>% select(Age:SS, recent_cannabis_use)
+drug_use_subset
+
+#Train and Test
+train_index = sample(nrow(drug_use_subset), 1500)
+
+drug_use_train = drug_use_subset[train_index, ]
+drug_use_test = drug_use_subset[-train_index, ]
+dim(drug_use_train)
+dim(drug_use_test)
+
+```
+The dimensions of the training set is 1500 along with 385 in the test set which comes out to 1885 which verifies the data set is the right size.\
+
+## (c)
+
+```{r}
+drug_train_fit= glm(recent_cannabis_use~ ., data = drug_use_train, family = binomial)
+
+drug_train_predict = predict(drug_train_fit, type = "response")
+summary(drug_train_predict)
+```
+
+\newpage
+
+# (2)
+
+```{r}
+tree_parameters = tree.control(nobs=nrow(drug_use_train), minsize=10, mindev=1e-3)
+```
+
+## (a)
+
+```{r}
+set.seed(123)
+drug_use_tree = tree(recent_cannabis_use~., data = drug_use_train, control = tree_parameters)
+drugtree = cv.tree(drug_use_tree, FUN = prune.misclass, K = 10)
+devsize = as.data.frame(cbind(drugtree$size, drugtree$dev))
+devsize = devsize[order(devsize$V1),]
+best_size = devsize$V1[which.min(devsize$V2)]
+best_size
+```
+We can see from our model that the size of the tree that minimizes the cross validation error is `r best_size`.
+
+## (b)
+
+```{r}
+drug_pruned = prune.tree(drug_use_tree, best = best_size, method = "misclass")
+draw.tree(drug_pruned, cex = 0.4, nodeinfo = TRUE)
+```
+
+The first split in the decision tree is the variable "Country".
+
+## (c)
+
+```{r}
+drug_pred = predict(drug_pruned, drug_use_test, type = "class")
+confusion_test = table(predicted = drug_pred, true = drug_use_test$recent_cannabis_use)
+confusion_test
+
+```
+The equation of TPR is given as $\frac{TP}{TP+FN}$ and FPR as $\frac{FP}{FP+TN}$.\
+TPR = $\frac{160}{160 + 31} = 0.8376963$\
+FPR = $\frac{38}{38 + 156} = 0.1958763$\
+
+\newpage
+
+# (3) 
+
+## (a)
+
+```{r}
+#Logistic
+drug_test_log_predict = predict(drug_train_fit, drug_use_test, type = "response")
+predLog = prediction(drug_test_log_predict, drug_use_test$recent_cannabis_use)
+perfLog = performance(predLog, measure = "tpr", x.measure = "fpr")
+plot(perfLog, col = "steelblue", lwd = 3, main = "ROC Curve")
+
+
+#Decision
+drug_test_predict = predict(drug_pruned, drug_use_test, type = "vector")
+predDec = prediction(drug_test_predict[,2], drug_use_test$recent_cannabis_use)
+perfDec = performance(predDec, measure = "tpr", x.measure = "fpr")
+plot(perfDec, add = TRUE, col = "red")
+abline(0,1)
+legend(0.6,0.4, legend = c("Logistic Regression", "Decision Tree"), col = c("steelblue", "red"), lty = 1, cex = 0.8)
+```
+
+## (b)
+
+```{r}
+log_auc = performance(predLog, measure = "auc")
+log_auc = log_auc@y.values[[1]]
+log_auc
+
+dec_auc = performance(predDec, measure = "auc")
+dec_auc = dec_auc@y.values[[1]]
+dec_auc
+```
+From the calculations shown above, the logistic regression model gives us an AUC of `r log_auc` and the decision tree model gives us an AUC of `r dec_auc`. We can clearly see that the logistic regression model has a larger AUC. 
+
+\newpage
+
+# (4)
+
+```{r message=FALSE, warning=FALSE}
+leukemia_data <- read_csv("leukemia_data.csv")
+```
+
+## (a) 
+
+```{r}
+leukemia_data = leukemia_data %>%
+  mutate(Type = factor(Type))
+table(leukemia_data$Type)
+```
+
+We can see here that the BCR-ABL is the subtype that occurs the least in this data
+
+## (b)
+
+```{r}
+#Setup for pve
+pr_out = prcomp(subset(leukemia_data, select = -c(Type)), scale = TRUE)
+pr_var = pr_out$sdev^2
+
+
+pve <- pr_var / sum(pr_var)
+cumulative_pve <- cumsum(pve)
+  
+
+par(mfrow=c(1, 2))
+plot(pve, type="l", lwd=3, xlab = "Principal Component", ylab = "PVE")
+plot(cumulative_pve, type="l", lwd=3, xlab = "Principal Component", ylab = "Cumulative PVE")
+```
+
+## (c) 
+
+```{r}
+#ScatterPlot
+rainbow_colors <- rainbow(7)
+plot_colors <- rainbow_colors[leukemia_data$Type]
+plot(pr_out$x, col = plot_colors, cex = 0.001)
+text(pr_out$x, labels = leukemia_data$Type, col = plot_colors, cex = 0.5)
+
+#Second part
+head(sort(abs(pr_out$rotation[,1])), 6)
+```
+
+The group that is most clearly separated from the PC1 axis is *TEL_AML1*. The genes with the highest absolute loadings for PC1 is *SRSF8, BUB1B, SEC11A, 35985_at, EVI2B, ZFAND5*.
+
+## (f)
+
+```{r warning=FALSE}
+library(dendextend)
+leukemia_subset = filter(leukemia_data, leukemia_data$Type == 'T-ALL' | leukemia_data$Type == 'TEL-AML1' | leukemia_data$Type == 'Hyperdip50')
+leuk_dist = dist(leukemia_subset)
+set.seed(123)
+leuk_Hclust = hclust(leuk_dist)
+
+#First plot
+dend = as.dendrogram(leuk_Hclust)
+d3 = color_branches(dend, k = 3)
+dat = color_labels(d3, k = 3)
+par(cex = 0.3)
+plot(dat, horiz = TRUE, main = "3 Leaukimia Types")
+abline(v = 45, lty = 2)
+
+#Second plot
+d5 = color_branches(dend, k = 5)
+dat2 = color_labels(d5, k = 5)
+par(cex = 0.3)
+plot(dat2, horiz = TRUE, main = "5 Leaukimia Types")
+abline(v = 41.5, lty = 2)
+cutree(dend, k = 5)
+```

@@ -1,0 +1,190 @@
+---
+title: "HW2_JL"
+author: "Justin Lee & Brendan Morrison"
+date: "10/30/2020"
+output: pdf_document
+---
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(tree)
+library(plyr)
+library(class)
+library(rpart)
+library(maptree)
+library(ROCR)
+library(dplyr)
+```
+
+```{r}
+spam <- read_table2("spambase.tab", guess_max=2000)
+
+spam <- spam %>%
+  mutate(spam = as.factor(ifelse(y <= median(y), "good", "spam")))
+
+
+calc_error_rate <- function(predicted.value, true.value){
+  return(mean(true.value!=predicted.value))
+}
+
+records = matrix(NA, nrow=3, ncol=2)
+colnames(records) <- c("train.error","test.error")
+rownames(records) <- c("knn","tree","logistic")
+
+set.seed(1)
+test.indices = sample(1:nrow(spam), 1000)
+spam.train=spam[-test.indices,]
+spam.test=spam[test.indices,]
+
+nfold = 10
+folds = seq.int(nrow(spam.train)) %>% 
+  cut(breaks = nfold, labels=FALSE) %>%
+  sample 
+```
+
+# (1) 
+```{r}
+do.chunk <- function(chunkid, folddef, Xdat, Ydat, k){
+  train = (folddef!=chunkid)
+  Xtr = Xdat[train,]
+  Ytr = Ydat[train]
+  Xvl = Xdat[!train,]
+  Yvl = Ydat[!train]
+## get classifications for current training chunks
+  predYtr = knn(train = Xtr, test = Xtr, cl = Ytr, k = k)
+## get classifications for current test chunk
+  predYvl = knn(train = Xtr, test = Xvl, cl = Ytr, k = k)
+  data.frame(train.error = calc_error_rate(predYtr, Ytr),
+             val.error = calc_error_rate(predYvl, Yvl))
+}
+
+
+
+
+YTrain = spam.train$spam
+XTrain = scale(spam.train %>% select(-spam))
+
+YTest = spam.test$spam
+XTest = scale(spam.test %>% select(-spam))
+
+
+kvec = c(1, seq(10, 50, length.out=5))
+error.folds = NULL
+set.seed(1)
+
+
+for (i in kvec){
+  tmp = ldply(1:nfold, do.chunk,
+              folddef = folds, Xdat = XTrain, Ydat = YTrain, k =i)
+  tmp$folds = seq(1,10,1)
+  tmp$neighbors = i
+  error.folds = rbind(error.folds,tmp)
+}
+
+error.folds
+
+#Now obtain the test errors for all the values of k (1,10,20,30,40,50).
+error <- as.tibble(error.folds)
+k_1 <- error %>% filter(neighbors == 1) %>% summarise(mean(val.error))
+k_10 <- error %>% filter(neighbors == 10) %>% summarise(mean(val.error))
+k_20 <- error %>% filter(neighbors == 20) %>% summarise(mean(val.error))
+k_30 <- error %>% filter(neighbors == 30) %>% summarise(mean(val.error))
+k_40 <- error %>% filter(neighbors == 40) %>% summarise(mean(val.error))
+k_50 <- error %>% filter(neighbors == 50) %>% summarise(mean(val.error))
+
+#find the smllaest value for the optimal k
+
+best <- min(k_1, k_10, k_20, k_30, k_40, k_50)
+best
+k_1
+            
+```
+
+We can see that using the min() function that when k = 1, we get the smallest estimated test error.
+
+# (2) 
+
+```{r}
+#training error rate
+pred_YTrain = knn(train = XTrain, test = XTrain, cl = YTrain, k = 10)
+train_error = calc_error_rate(pred_YTrain,YTrain)
+train_error
+
+#test error rate
+pred_YTest = knn( train = XTrain, test = XTest, cl = YTrain, k = 10)
+test_error = calc_error_rate(pred_YTest, YTest)
+
+
+records = matrix(c(train_error, NA, NA, test_error, NA, NA), nrow = 3, ncol = 2)
+colnames(records) <- c("train_error","test_error")
+rownames(records) <- c("knn", "tree", "logistic")
+records 
+
+```
+
+# (3)
+```{r}
+#Re-read the table due to number 1
+spam <- read_table2("spambase.tab", guess_max=2000)
+spam <- spam %>%
+  mutate(y = factor(y, levels=c(0,1), labels=c("good", "spam"))) %>% # label as factors
+  mutate_at(.vars=vars(-y), .funs=scale)
+
+set.seed(1)
+test.indices = sample(1:nrow(spam), 1000)
+spam.train=spam[-test.indices,]
+spam.test=spam[test.indices,]
+
+YTest = spam.test$y
+YTrain = spam.train$y
+
+nrow(spam.train)
+
+spamtree = tree(y ~ ., data = spam.train,
+                control = tree.control(3601, minsize = 5, mindev = 0.00001))
+
+summary(spamtree)
+```
+We can see from our output(summary()) that there are a total of 149 leaf nodes in this tree and that there are 49 training observaitons that are misclassified
+
+# (4)
+
+```{r}
+draw.tree(prune.tree(spamtree, best = 10), nodeinfo = TRUE, cex = 0.5)
+```
+
+# (5)
+
+```{r}
+spam.cv = cv.tree(spamtree, rand = folds, FUN = prune.misclass, K = 10)
+spam.cv$size
+spam.cv$dev
+
+best.size.cv = spam.cv$size[which.min(spam.cv$dev)]
+best.size.cv
+
+plot(spam.cv$size, spam.cv$dev, type = "b", xlab = "Leaves", ylab = "Misclassification Error", main = "Misclassification as a Function of Tree Size", col = "blue")
+abline(v = 35, col = "red")
+
+```
+We know from the dev that after the 13th deviation the numbers go up from 353 to 355 and then increases. We set the abline to the 13th value of the size which is 35. This means that the optimal tree size is 35. 
+
+# (6)
+```{r}
+#training error
+spamtree.pruned = prune.misclass(spamtree, best = 35)
+pred.train.tree = predict(spamtree.pruned, type = "class")
+train.error.tree = calc_error_rate(pred.train.tree, YTrain)
+train.error.tree
+
+#testing error
+pred.test.tree = predict(spamtree.pruned, type = "class")
+test.error.tree = calc_error_rate(pred.test.tree, YTest)
+test.error.tree
+
+records[2,2] = test.error.tree
+records[2,1] = train.error.tree
+records
+```
+
+
